@@ -1,0 +1,387 @@
+from selenium import webdriver 
+from selenium.webdriver.common.by import By  
+from selenium.webdriver.common.keys import Keys   
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver import ActionChains
+import time
+import os
+from datetime import datetime 
+
+# Función para crear carpeta numerada
+def crear_carpeta_prueba():
+    contador = 1
+    while True:
+        nombre_carpeta = f"prueba_coffee_cart_clic_derecho_{contador}"
+        if not os.path.exists(nombre_carpeta):
+            os.makedirs(nombre_carpeta)
+            return nombre_carpeta
+        contador += 1
+
+# Función para tomar captura de pantalla
+def tomar_captura(driver, carpeta, nombre_archivo):
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ruta_archivo = os.path.join(carpeta, f"{nombre_archivo}_{timestamp}.png")
+    driver.save_screenshot(ruta_archivo)
+    print(f"Captura guardada: {ruta_archivo}")
+    return ruta_archivo
+
+# NUEVA FUNCIÓN: Agregar producto con clic derecho
+def agregar_producto_clic_derecho(driver, carpeta, producto_selector, nombre_producto, confirmar=True):
+    try:
+        print(f"\n=== PROBANDO CLIC DERECHO EN {nombre_producto} ===")
+        
+        # Captura ANTES del clic derecho
+        tomar_captura(driver, carpeta, f"before_right_click_{nombre_producto.lower().replace(' ', '_')}")
+        
+        wait = WebDriverWait(driver, 10)
+        
+        # Buscar el producto
+        producto = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, producto_selector)))
+        print(f"Producto {nombre_producto} encontrado")
+        
+        # Hacer clic derecho en el producto
+        actions = ActionChains(driver)
+        actions.context_click(producto).perform()
+        time.sleep(3)
+        
+        # Captura DESPUÉS del clic derecho (debería mostrar el popup/modal)
+        tomar_captura(driver, carpeta, f"after_right_click_{nombre_producto.lower().replace(' ', '_')}")
+        
+        # Buscar el popup/modal de confirmación
+        popup_selectores = [
+            ".modal",
+            ".popup",
+            ".confirmation-dialog",
+            ".right-click-menu",
+            ".context-menu",
+            "[role='dialog']",
+            ".swal2-popup",  # SweetAlert
+            ".confirm-dialog"
+        ]
+        
+        popup_encontrado = False
+        popup_element = None
+        
+        for selector in popup_selectores:
+            try:
+                popup_element = driver.find_element(By.CSS_SELECTOR, selector)
+                if popup_element.is_displayed():
+                    print(f"✅ Popup de confirmación encontrado: {selector}")
+                    popup_encontrado = True
+                    break
+            except:
+                continue
+        
+        if not popup_encontrado:
+            print("⚠  No se encontró popup específico, buscando botones de confirmación...")
+            # Buscar botones de confirmación directamente
+            botones_confirmacion = driver.find_elements(By.XPATH, "//*[contains(text(), 'Yes') or contains(text(), 'Sí') or contains(text(), 'Add') or contains(text(), 'Agregar') or contains(text(), 'OK')]")
+            if botones_confirmacion:
+                popup_encontrado = True
+                print(f"✅ Botones de confirmación encontrados: {len(botones_confirmacion)}")
+        
+        if popup_encontrado:
+            # Captura del popup visible
+            tomar_captura(driver, carpeta, f"popup_visible_{nombre_producto.lower().replace(' ', '_')}")
+            
+            if confirmar:
+                # Buscar y hacer clic en "Sí" / "Yes" / "Add" / "Agregar"
+                botones_si = [
+                    "//button[contains(text(), 'Yes')]",
+                    "//button[contains(text(), 'Sí')]",
+                    "//button[contains(text(), 'Add')]",
+                    "//button[contains(text(), 'Agregar')]",
+                    "//button[contains(text(), 'OK')]",
+                    "//button[contains(text(), 'Confirm')]",
+                    ".confirm-yes",
+                    ".btn-confirm",
+                    ".swal2-confirm"
+                ]
+                
+                boton_confirmado = False
+                for selector in botones_si:
+                    try:
+                        if selector.startswith("//"):
+                            boton = driver.find_element(By.XPATH, selector)
+                        else:
+                            boton = driver.find_element(By.CSS_SELECTOR, selector)
+                        
+                        print(f"Haciendo clic en botón de confirmación: {boton.text}")
+                        boton.click()
+                        time.sleep(3)
+                        boton_confirmado = True
+                        break
+                    except:
+                        continue
+                
+                if boton_confirmado:
+                    tomar_captura(driver, carpeta, f"confirmed_add_{nombre_producto.lower().replace(' ', '_')}")
+                    print(f"✅ {nombre_producto} confirmado y agregado al carrito")
+                    return f"Agregado con confirmación: {nombre_producto}"
+                else:
+                    print(f"⚠  No se encontró botón de confirmación para {nombre_producto}")
+                    return f"Popup mostrado pero no confirmado: {nombre_producto}"
+            
+            else:
+                # Buscar y hacer clic en "No" / "Cancel" / "Cancelar"
+                botones_no = [
+                    "//button[contains(text(), 'No')]",
+                    "//button[contains(text(), 'Cancel')]",
+                    "//button[contains(text(), 'Cancelar')]",
+                    "//button[contains(text(), 'Close')]",
+                    ".confirm-no",
+                    ".btn-cancel",
+                    ".swal2-cancel"
+                ]
+                
+                boton_cancelado = False
+                for selector in botones_no:
+                    try:
+                        if selector.startswith("//"):
+                            boton = driver.find_element(By.XPATH, selector)
+                        else:
+                            boton = driver.find_element(By.CSS_SELECTOR, selector)
+                        
+                        print(f"Haciendo clic en botón de cancelación: {boton.text}")
+                        boton.click()
+                        time.sleep(3)
+                        boton_cancelado = True
+                        break
+                    except:
+                        continue
+                
+                if boton_cancelado:
+                    tomar_captura(driver, carpeta, f"cancelled_add_{nombre_producto.lower().replace(' ', '_')}")
+                    print(f"❌ {nombre_producto} cancelado, NO agregado al carrito")
+                    return f"Cancelado: {nombre_producto}"
+                else:
+                    print(f"⚠  No se encontró botón de cancelación para {nombre_producto}")
+                    return f"Popup mostrado pero no cancelado: {nombre_producto}"
+        
+        else:
+            print(f"❌ No se encontró popup de confirmación para {nombre_producto}")
+            # Intentar clic normal como fallback
+            try:
+                producto.click()
+                time.sleep(2)
+                tomar_captura(driver, carpeta, f"fallback_normal_click_{nombre_producto.lower().replace(' ', '_')}")
+                return f"Sin popup, agregado con clic normal: {nombre_producto}"
+            except:
+                return f"ERROR: No se pudo agregar {nombre_producto}"
+        
+    except Exception as e:
+        print(f"ERROR con clic derecho en {nombre_producto}: {str(e)}")
+        tomar_captura(driver, carpeta, f"error_right_click_{nombre_producto.lower().replace(' ', '_')}")
+        return f"ERROR: {str(e)}"
+
+# Función para agregar producto normal (clic izquierdo)
+def agregar_producto_carrito(driver, carpeta, producto_selector, nombre_producto):
+    try:
+        print(f"\n=== AGREGANDO {nombre_producto} AL CARRITO (CLIC NORMAL) ===")
+        
+        tomar_captura(driver, carpeta, f"before_add_{nombre_producto.lower().replace(' ', '_')}")
+        
+        wait = WebDriverWait(driver, 10)
+        producto = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, producto_selector)))
+        producto.click()
+        time.sleep(2)
+        
+        tomar_captura(driver, carpeta, f"after_add_{nombre_producto.lower().replace(' ', '_')}")
+        
+        print(f"✅ {nombre_producto} agregado al carrito")
+        return True
+        
+    except Exception as e:
+        print(f"ERROR agregando {nombre_producto}: {str(e)}")
+        return False
+
+# Función para verificar carrito
+def verificar_carrito(driver, carpeta):
+    try:
+        print(f"\n=== VERIFICANDO CARRITO ===")
+        
+        tomar_captura(driver, carpeta, "before_cart_check")
+        
+        wait = WebDriverWait(driver, 10)
+        cart_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "[data-test='checkout']")))
+        cart_button.click()
+        time.sleep(3)
+        
+        tomar_captura(driver, carpeta, "cart_opened")
+        
+        try:
+            total_element = driver.find_element(By.CSS_SELECTOR, "[data-test='checkout-total']")
+            total = total_element.text
+            print(f"Total del carrito: {total}")
+        except:
+            print("No se pudo obtener el total del carrito")
+            total = "No disponible"
+        
+        return total
+        
+    except Exception as e:
+        print(f"ERROR verificando carrito: {str(e)}")
+        return "ERROR"
+
+# Función para proceso completo de pago en pestaña Cart
+def proceso_completo_pago_pestana_cart(driver, carpeta):
+    try:
+        print(f"\n{'='*70}")
+        print(f"=== PROCESO COMPLETO DE PAGO EN PESTAÑA 'CART' ===")
+        print(f"{'='*70}")
+        
+        # Ir a la pestaña "Cart" del menú superior
+        wait = WebDriverWait(driver, 15)
+        
+        posibles_selectores = [
+            "a[href='/cart']",
+            "nav a[href='/cart']",
+            ".nav-link[href='/cart']",
+            "header a[href='/cart']"
+        ]
+        
+        cart_tab = None
+        for selector in posibles_selectores:
+            try:
+                cart_tab = driver.find_element(By.CSS_SELECTOR, selector)
+                break
+            except:
+                continue
+        
+        if not cart_tab:
+            enlaces = driver.find_elements(By.TAG_NAME, "a")
+            for enlace in enlaces:
+                if "cart" in enlace.text.lower() and "/cart" in enlace.get_attribute("href"):
+                    cart_tab = enlace
+                    break
+        
+        if cart_tab:
+            print(f"✅ Pestaña 'Cart' encontrada: {cart_tab.text}")
+            cart_tab.click()
+            time.sleep(3)
+        else:
+            return "ERROR: Pestaña Cart no encontrada"
+        
+        tomar_captura(driver, carpeta, "pestana_cart_abierta")
+        
+        # Llenar formulario y procesar pago
+        try:
+            name_field = wait.until(EC.presence_of_element_located((By.ID, "name")))
+            name_field.clear()
+            name_field.send_keys("Usuario Clic Derecho")
+            
+            email_field = driver.find_element(By.ID, "email")
+            email_field.clear()
+            email_field.send_keys("clicderecho@test.com")
+            
+            time.sleep(2)
+            tomar_captura(driver, carpeta, "formulario_completado")
+            
+            submit_button = driver.find_element(By.ID, "submit-payment")
+            submit_button.click()
+            time.sleep(4)
+            
+            tomar_captura(driver, carpeta, "pago_procesado")
+            
+            try:
+                success_message = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".snackbar")))
+                mensaje = success_message.text
+                print(f"✅ Confirmación: {mensaje}")
+                return f"PAGO EXITOSO: {mensaje}"
+            except:
+                return "PAGO PROCESADO: Sin mensaje visible"
+                
+        except Exception as e:
+            return f"ERROR en checkout: {str(e)}"
+        
+    except Exception as e:
+        return f"ERROR GENERAL: {str(e)}"
+
+# ==================== SCRIPT PRINCIPAL ====================
+
+# Crear carpeta para esta prueba
+carpeta_prueba = crear_carpeta_prueba()
+print(f"Carpeta de prueba creada: {carpeta_prueba}")
+
+# Inicializar el navegador
+driver = webdriver.Chrome()
+driver.maximize_window()
+driver.get("https://coffee-cart.app/")
+time.sleep(3)
+
+print("=== INICIANDO PRUEBAS CON FUNCIONALIDAD DE CLIC DERECHO ===")
+
+# Tomar captura inicial
+tomar_captura(driver, carpeta_prueba, "pagina_inicial")
+
+# Realizar todas las operaciones
+resultados = {}
+
+# FASE 1: PRUEBAS DE CLIC DERECHO
+print(f"\n🔄 FASE 1: PROBANDO FUNCIONALIDAD DE CLIC DERECHO")
+
+# Producto 1: Clic derecho + CONFIRMAR (Sí)
+print(f"\n--- Prueba 1: Espresso con clic derecho + CONFIRMAR ---")
+resultados['espresso_clic_derecho_si'] = agregar_producto_clic_derecho(
+    driver, carpeta_prueba, "[data-test='Espresso']", "Espresso", confirmar=True
+)
+time.sleep(3)
+
+# Producto 2: Clic derecho + CANCELAR (No)
+print(f"\n--- Prueba 2: Cappuccino con clic derecho + CANCELAR ---")
+resultados['cappuccino_clic_derecho_no'] = agregar_producto_clic_derecho(
+    driver, carpeta_prueba, "[data-test='Cappuccino']", "Cappuccino", confirmar=False
+)
+time.sleep(3)
+
+# Producto 3: Clic derecho + CONFIRMAR (Sí)
+print(f"\n--- Prueba 3: Mocha con clic derecho + CONFIRMAR ---")
+resultados['mocha_clic_derecho_si'] = agregar_producto_clic_derecho(
+    driver, carpeta_prueba, "[data-test='Mocha']", "Mocha", confirmar=True
+)
+time.sleep(3)
+
+# FASE 2: AGREGAR UN PRODUCTO NORMAL (para comparar)
+print(f"\n🔄 FASE 2: AGREGANDO PRODUCTO CON CLIC NORMAL")
+resultados['americano_clic_normal'] = agregar_producto_carrito(
+    driver, carpeta_prueba, "[data-test='Americano']", "Americano"
+)
+time.sleep(3)
+
+# FASE 3: VERIFICAR CARRITO
+print(f"\n🔄 FASE 3: VERIFICANDO CARRITO")
+resultados['total_carrito'] = verificar_carrito(driver, carpeta_prueba)
+time.sleep(3)
+
+# FASE 4: PROCESO COMPLETO DE PAGO
+print(f"\n🔄 FASE 4: PROCESO COMPLETO DE PAGO")
+resultados['proceso_pago'] = proceso_completo_pago_pestana_cart(driver, carpeta_prueba)
+
+# MOSTRAR RESUMEN FINAL
+print(f"\n{'='*80}")
+print(f"=== RESUMEN FINAL - PRUEBAS CON CLIC DERECHO ===")
+print(f"{'='*80}")
+
+print(f"\n📋 PRUEBAS DE CLIC DERECHO:")
+print(f"  🖱  Espresso (clic derecho + SÍ): {resultados.get('espresso_clic_derecho_si', 'No ejecutado')}")
+print(f"  🖱  Cappuccino (clic derecho + NO): {resultados.get('cappuccino_clic_derecho_no', 'No ejecutado')}")
+print(f"  🖱  Mocha (clic derecho + SÍ): {resultados.get('mocha_clic_derecho_si', 'No ejecutado')}")
+
+print(f"\n📋 COMPARACIÓN CON CLIC NORMAL:")
+print(f"  🖱  Americano (clic normal): {'Agregado exitosamente' if resultados.get('americano_clic_normal') else 'Error'}")
+
+print(f"\n📋 VERIFICACIÓN Y PAGO:")
+print(f"  🛒 Total del carrito: {resultados.get('total_carrito', 'No verificado')}")
+print(f"  💳 Proceso de pago: {resultados.get('proceso_pago', 'No ejecutado')}")
+
+print(f"\n📁 Todas las capturas se guardaron en: {carpeta_prueba}")
+
+# Captura final
+tomar_captura(driver, carpeta_prueba, "estado_final")
+
+time.sleep(3)
+driver.quit()
+
+print(f"\n🎉 PRUEBAS CON CLIC DERECHO COMPLETADAS 🎉")
+print(f"🔍 Revisa las capturas para ver los popups de confirmación")
